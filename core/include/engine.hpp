@@ -17,11 +17,7 @@ namespace core{
     std::string meshRef;
   };
   enum class CullingType{
-    none, back, front, both
-  };
-  class CullingTypeHelper{
-    public:
-      static CullingType fromString(std::string culling);
+    none, back
   };
   struct SimpleShading{
     std::string id;

@@ -253,7 +253,7 @@ namespace core{
       }
       go.components.push_back(SimpleShading{
         .id = simpleShading->id()->str(),
-        .culling = CullingTypeHelper::fromString(simpleShading->culling()->str()),
+        .culling = static_cast<CullingType>(simpleShading->culling()),
         .transparent = simpleShading->transparent(),
         .color = glm::vec3(color->x(), color->y(), color->z()),
       });
@@ -288,7 +288,6 @@ namespace core{
 
     return true;
   }
-  float angle = 0.0f;
   void SceneRenderer::_goLooper(const GameObject &go, const ParentData &parentData){
     assert(_inited && "call init first");
     ResourceManager &resourceManager = ResourceManager::GetInstance();
@@ -434,7 +433,8 @@ namespace core{
         bool result = renderer.getSimpleShader()->render({
           .shaderType = opaqueNode.shaderType,
           .gpuVBO = gpuVBO,
-          .mvpMat4 = _renderData.vpMat4 * opaqueNode.modelMat4
+          .mvpMat4 = _renderData.vpMat4 * opaqueNode.modelMat4,
+          .color = opaqueNode.simpleShading.color
         });
         if(!result) return false;
       }

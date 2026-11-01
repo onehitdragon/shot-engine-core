@@ -19,6 +19,7 @@ namespace core{
     ShaderType shaderType;
     GpuVBO *gpuVBO;
     glm::mat4 mvpMat4;
+    glm::vec3 color;
   };
   class SimpleShader{
     private:
@@ -45,6 +46,10 @@ namespace core{
       SimpleShader *_simpleShader = nullptr;
       ShaderType _curShaderType;
 
+      int _width = -1;
+      int _height = -1;
+      SDL_GPUTexture *_depthTexture = nullptr;
+      SDL_GPUTexture* _tryCreateDepthTexture();
     public:
       Renderer(const Renderer&) = delete;
       Renderer& operator=(const Renderer&) = delete;

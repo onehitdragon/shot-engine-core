@@ -821,8 +821,8 @@ struct SimpleShading FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *id() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ID);
   }
-  const ::flatbuffers::String *culling() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_CULLING);
+  uint32_t culling() const {
+    return GetField<uint32_t>(VT_CULLING, 0);
   }
   bool transparent() const {
     return GetField<uint8_t>(VT_TRANSPARENT, 0) != 0;
@@ -835,8 +835,7 @@ struct SimpleShading FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_ID) &&
            verifier.VerifyString(id()) &&
-           VerifyOffset(verifier, VT_CULLING) &&
-           verifier.VerifyString(culling()) &&
+           VerifyField<uint32_t>(verifier, VT_CULLING, 4) &&
            VerifyField<uint8_t>(verifier, VT_TRANSPARENT, 1) &&
            VerifyOffset(verifier, VT_COLOR) &&
            verifier.VerifyTable(color()) &&
@@ -851,8 +850,8 @@ struct SimpleShadingBuilder {
   void add_id(::flatbuffers::Offset<::flatbuffers::String> id) {
     fbb_.AddOffset(SimpleShading::VT_ID, id);
   }
-  void add_culling(::flatbuffers::Offset<::flatbuffers::String> culling) {
-    fbb_.AddOffset(SimpleShading::VT_CULLING, culling);
+  void add_culling(uint32_t culling) {
+    fbb_.AddElement<uint32_t>(SimpleShading::VT_CULLING, culling, 0);
   }
   void add_transparent(bool transparent) {
     fbb_.AddElement<uint8_t>(SimpleShading::VT_TRANSPARENT, static_cast<uint8_t>(transparent), 0);
@@ -874,7 +873,7 @@ struct SimpleShadingBuilder {
 inline ::flatbuffers::Offset<SimpleShading> CreateSimpleShading(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> id = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> culling = 0,
+    uint32_t culling = 0,
     bool transparent = false,
     ::flatbuffers::Offset<FBSEngine::Vec3> color = 0) {
   SimpleShadingBuilder builder_(_fbb);
@@ -888,15 +887,14 @@ inline ::flatbuffers::Offset<SimpleShading> CreateSimpleShading(
 inline ::flatbuffers::Offset<SimpleShading> CreateSimpleShadingDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *id = nullptr,
-    const char *culling = nullptr,
+    uint32_t culling = 0,
     bool transparent = false,
     ::flatbuffers::Offset<FBSEngine::Vec3> color = 0) {
   auto id__ = id ? _fbb.CreateString(id) : 0;
-  auto culling__ = culling ? _fbb.CreateString(culling) : 0;
   return FBSEngine::CreateSimpleShading(
       _fbb,
       id__,
-      culling__,
+      culling,
       transparent,
       color);
 }
@@ -1160,8 +1158,8 @@ struct PhongShading FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *id() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ID);
   }
-  const ::flatbuffers::String *culling() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_CULLING);
+  uint32_t culling() const {
+    return GetField<uint32_t>(VT_CULLING, 0);
   }
   bool transparent() const {
     return GetField<uint8_t>(VT_TRANSPARENT, 0) != 0;
@@ -1190,8 +1188,7 @@ struct PhongShading FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_ID) &&
            verifier.VerifyString(id()) &&
-           VerifyOffset(verifier, VT_CULLING) &&
-           verifier.VerifyString(culling()) &&
+           VerifyField<uint32_t>(verifier, VT_CULLING, 4) &&
            VerifyField<uint8_t>(verifier, VT_TRANSPARENT, 1) &&
            VerifyField<uint8_t>(verifier, VT_DIFFUSE_TYPE, 1) &&
            VerifyOffset(verifier, VT_DIFFUSE) &&
@@ -1218,8 +1215,8 @@ struct PhongShadingBuilder {
   void add_id(::flatbuffers::Offset<::flatbuffers::String> id) {
     fbb_.AddOffset(PhongShading::VT_ID, id);
   }
-  void add_culling(::flatbuffers::Offset<::flatbuffers::String> culling) {
-    fbb_.AddOffset(PhongShading::VT_CULLING, culling);
+  void add_culling(uint32_t culling) {
+    fbb_.AddElement<uint32_t>(PhongShading::VT_CULLING, culling, 0);
   }
   void add_transparent(bool transparent) {
     fbb_.AddElement<uint8_t>(PhongShading::VT_TRANSPARENT, static_cast<uint8_t>(transparent), 0);
@@ -1250,7 +1247,7 @@ struct PhongShadingBuilder {
 inline ::flatbuffers::Offset<PhongShading> CreatePhongShading(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> id = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> culling = 0,
+    uint32_t culling = 0,
     bool transparent = false,
     FBSEngine::ImageOrColor diffuse_type = FBSEngine::ImageOrColor_NONE,
     ::flatbuffers::Offset<void> diffuse = 0,
@@ -1270,18 +1267,17 @@ inline ::flatbuffers::Offset<PhongShading> CreatePhongShading(
 inline ::flatbuffers::Offset<PhongShading> CreatePhongShadingDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *id = nullptr,
-    const char *culling = nullptr,
+    uint32_t culling = 0,
     bool transparent = false,
     FBSEngine::ImageOrColor diffuse_type = FBSEngine::ImageOrColor_NONE,
     ::flatbuffers::Offset<void> diffuse = 0,
     ::flatbuffers::Offset<FBSEngine::Vec3> specular = 0,
     double shininess = 0.0) {
   auto id__ = id ? _fbb.CreateString(id) : 0;
-  auto culling__ = culling ? _fbb.CreateString(culling) : 0;
   return FBSEngine::CreatePhongShading(
       _fbb,
       id__,
-      culling__,
+      culling,
       transparent,
       diffuse_type,
       diffuse,
@@ -1311,8 +1307,8 @@ struct PbrShading FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *id() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ID);
   }
-  const ::flatbuffers::String *culling() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_CULLING);
+  uint32_t culling() const {
+    return GetField<uint32_t>(VT_CULLING, 0);
   }
   bool transparent() const {
     return GetField<uint8_t>(VT_TRANSPARENT, 0) != 0;
@@ -1393,8 +1389,7 @@ struct PbrShading FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_ID) &&
            verifier.VerifyString(id()) &&
-           VerifyOffset(verifier, VT_CULLING) &&
-           verifier.VerifyString(culling()) &&
+           VerifyField<uint32_t>(verifier, VT_CULLING, 4) &&
            VerifyField<uint8_t>(verifier, VT_TRANSPARENT, 1) &&
            VerifyField<uint8_t>(verifier, VT_DIFFUSE_TYPE, 1) &&
            VerifyOffset(verifier, VT_DIFFUSE) &&
@@ -1465,8 +1460,8 @@ struct PbrShadingBuilder {
   void add_id(::flatbuffers::Offset<::flatbuffers::String> id) {
     fbb_.AddOffset(PbrShading::VT_ID, id);
   }
-  void add_culling(::flatbuffers::Offset<::flatbuffers::String> culling) {
-    fbb_.AddOffset(PbrShading::VT_CULLING, culling);
+  void add_culling(uint32_t culling) {
+    fbb_.AddElement<uint32_t>(PbrShading::VT_CULLING, culling, 0);
   }
   void add_transparent(bool transparent) {
     fbb_.AddElement<uint8_t>(PbrShading::VT_TRANSPARENT, static_cast<uint8_t>(transparent), 0);
@@ -1521,7 +1516,7 @@ struct PbrShadingBuilder {
 inline ::flatbuffers::Offset<PbrShading> CreatePbrShading(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> id = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> culling = 0,
+    uint32_t culling = 0,
     bool transparent = false,
     FBSEngine::ImageOrColor diffuse_type = FBSEngine::ImageOrColor_NONE,
     ::flatbuffers::Offset<void> diffuse = 0,
@@ -1557,7 +1552,7 @@ inline ::flatbuffers::Offset<PbrShading> CreatePbrShading(
 inline ::flatbuffers::Offset<PbrShading> CreatePbrShadingDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *id = nullptr,
-    const char *culling = nullptr,
+    uint32_t culling = 0,
     bool transparent = false,
     FBSEngine::ImageOrColor diffuse_type = FBSEngine::ImageOrColor_NONE,
     ::flatbuffers::Offset<void> diffuse = 0,
@@ -1572,11 +1567,10 @@ inline ::flatbuffers::Offset<PbrShading> CreatePbrShadingDirect(
     FBSEngine::OptionalImage ao_type = FBSEngine::OptionalImage_NONE,
     ::flatbuffers::Offset<void> ao = 0) {
   auto id__ = id ? _fbb.CreateString(id) : 0;
-  auto culling__ = culling ? _fbb.CreateString(culling) : 0;
   return FBSEngine::CreatePbrShading(
       _fbb,
       id__,
-      culling__,
+      culling,
       transparent,
       diffuse_type,
       diffuse,

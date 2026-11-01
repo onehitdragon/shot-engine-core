@@ -31,6 +31,30 @@ namespace core{
     assert(_inited && "require call init");
     return _canRender;
   }
+  SDL_GPUTexture* Renderer::_tryCreateDepthTexture(){
+    int curWidth, curHeight;
+    SDL_GetWindowSizeInPixels(_window, &curWidth, &curHeight);
+    if(_width == curWidth && _height == curHeight) return _depthTexture;
+    SDL_ReleaseGPUTexture(_device, _depthTexture);
+    // create new depth texture
+    _width = curWidth;
+    _height = curHeight;
+    SDL_GPUTextureCreateInfo textureInfo{
+      .type = SDL_GPU_TEXTURETYPE_2D,
+      .format = SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+      .usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+      .width = static_cast<Uint32>(_width),
+      .height = static_cast<Uint32>(_height),
+      .layer_count_or_depth = 1,
+      .num_levels = 1
+    };
+    _depthTexture = SDL_CreateGPUTexture(_device, &textureInfo);
+    if(_depthTexture == nullptr){
+      SDL_Log("Error while create depth texture: SDL_CreateGPUTexture %s", SDL_GetError());
+      return nullptr;
+    }
+    return _depthTexture;
+  }
   bool Renderer::init(){
     assert(!_inited && "dont call init 2 times");
 
@@ -52,9 +76,11 @@ namespace core{
       return false;
     }
 
+    // create shaders
     _simpleShader = new SimpleShader();
     if(!_simpleShader->init()) return false;
 
+    // disable vsync
     // if(SDL_WindowSupportsGPUPresentMode(_device, _window, SDL_GPU_PRESENTMODE_IMMEDIATE)){
     //   SDL_Log("Can turned off vsync");
     //   if(!SDL_SetGPUSwapchainParameters(
@@ -70,6 +96,7 @@ namespace core{
   }
   bool Renderer::release(){
     SDL_Log("clear renderer");
+    SDL_ReleaseGPUTexture(_device, _depthTexture);
     delete _simpleShader;
     SDL_ReleaseWindowFromGPUDevice(_device, _window);
     SDL_DestroyWindow(_window);
@@ -116,8 +143,20 @@ namespace core{
         .load_op = SDL_GPU_LOADOP_CLEAR,
         .store_op = SDL_GPU_STOREOP_STORE,
       };
+      if(_tryCreateDepthTexture() == nullptr) return false;
+      SDL_GPUDepthStencilTargetInfo depthStencilInfo{
+        .texture = _depthTexture,
+        .clear_depth = 1.0f,
+        .load_op = SDL_GPU_LOADOP_CLEAR,
+        .store_op = SDL_GPU_STOREOP_DONT_CARE,
+        .stencil_load_op = SDL_GPU_LOADOP_DONT_CARE,
+        .stencil_store_op = SDL_GPU_STOREOP_DONT_CARE
+      };
       _renderPass = SDL_BeginGPURenderPass(
-        _commandBuffer, &colorTargetInfo, 1, nullptr
+        _commandBuffer,
+        &colorTargetInfo,
+        1,
+        &depthStencilInfo
       );
     }
     _curShaderType = ShaderType::None;
@@ -245,7 +284,10 @@ namespace core{
     };
     std::array colorTargetDescriptions{
       SDL_GPUColorTargetDescription{
-        .format = SDL_GetGPUSwapchainTextureFormat(device, window)
+        .format = SDL_GetGPUSwapchainTextureFormat(device, window),
+        .blend_state{
+          .enable_blend = false,
+        }
       }
     };
     SDL_GPUGraphicsPipelineCreateInfo pipelineCreateInfo{
@@ -263,9 +305,17 @@ namespace core{
         .cull_mode = SDL_GPU_CULLMODE_NONE,
         .front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
       },
+      .depth_stencil_state{
+        .compare_op = SDL_GPU_COMPAREOP_LESS,
+        .enable_depth_test = true,
+        .enable_depth_write = true,
+        .enable_stencil_test = false
+      },
       .target_info = SDL_GPUGraphicsPipelineTargetInfo{
         .color_target_descriptions = colorTargetDescriptions.data(),
         .num_color_targets = colorTargetDescriptions.size(),
+        .depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+        .has_depth_stencil_target = true
       },
     };
     _pipelineNoCull = SDL_CreateGPUGraphicsPipeline(device, &pipelineCreateInfo);
@@ -332,8 +382,7 @@ namespace core{
     SDL_BindGPUVertexBuffers(renderPass, 0, vertexBuffers.data(), vertexBuffers.size());
     SDL_BindGPUIndexBuffer(renderPass, indexBuffers.data(), SDL_GPU_INDEXELEMENTSIZE_32BIT);
     SDL_PushGPUVertexUniformData(renderer.getCommandBuffer(), 0, &param.mvpMat4[0][0], sizeof(param.mvpMat4));
-    glm::vec3 color(1.0f);
-    SDL_PushGPUFragmentUniformData(renderer.getCommandBuffer(), 0, &color[0], sizeof(color));
+    SDL_PushGPUFragmentUniformData(renderer.getCommandBuffer(), 0, &param.color[0], sizeof(param.color));
     SDL_DrawGPUIndexedPrimitives(renderPass, param.gpuVBO->getNumIndices(), 1, 0, 0, 0);
     return true;
   }
