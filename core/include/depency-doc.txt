@@ -1,0 +1,6 @@
+renderer.hpp -> gpu-resource.hpp
+resource-manager.hpp -> gpu-resource.hpp
+
+independents:
+gpu-resource.hpp
+engine.hpp

@@ -1,0 +1,9 @@
+{
+    "configurations": [
+        {
+          "name": "Win32",
+          "compileCommands": ".vscode/compile_commands.json"
+        }
+    ],
+    "version": 4
+}

@@ -1,0 +1,7 @@
+target("core")
+  set_kind("binary")
+  add_files("src/*.cpp")
+  add_includedirs("include")
+  add_packages("libsdl3")
+  add_packages("flatbuffers")
+  add_packages("glm")
