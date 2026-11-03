@@ -94,7 +94,7 @@ namespace core{
   void PAKFile::info(){
     assert(_inited && "call init first");
 
-    SDL_Log("Pak info: id(%s) entries(%d)", _id, _pakEntryMap.size());
+    SDL_Log("Pak info: id(%s) entries(%d)", _id.c_str(), _pakEntryMap.size());
     for(const auto& [key, value] : _pakEntryMap){
       SDL_Log("Pak info: entry(%s) type(%d)", key.c_str(), value.type);
     }

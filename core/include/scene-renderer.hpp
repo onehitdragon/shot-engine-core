@@ -14,11 +14,11 @@ namespace core{
     glm::mat4 modelMat4 = glm::mat4(1.0f);
   };
   struct NodeData{
-    Uint64 sortKey = 0;
+    Uint64 sortKey;
+    Uint32 pipelineFlag;
     glm::mat4 modelMat4 = glm::mat4(1.0f);
     Mesh mesh;
     SimpleShading simpleShading;
-    ShaderType shaderType;
   };
   struct RenderData{
     bool haveCamera;
@@ -38,7 +38,7 @@ namespace core{
       SDL_Window *_window;
       std::string _settingAssetUuid;
       std::string _mainSceneUuid; // if empty, find by _settingAssetUuid
-      Scene *_scene = nullptr;
+      Scene *_scene = nullptr; // can change at run time from script...
       RenderData _renderData;
       bool _sceneNodeLooper(
         const uint32_t &type, const void *sceneNode, GameObject &go, bool &isPending

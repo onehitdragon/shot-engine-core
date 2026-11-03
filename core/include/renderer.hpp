@@ -9,29 +9,28 @@
 #include <cassert>
 #include "gpu-resource.hpp"
 #include "glm/mat4x4.hpp"
+#include "engine.hpp"
 
 namespace core{
-  enum class ShaderType{
-    None, SimpleNoCull, SimpleBackCull, Pbr
-  };
-
   struct SimpleShaderParam{
-    ShaderType shaderType;
+    Uint32 pipelineFlag;
     GpuVBO *gpuVBO;
     glm::mat4 mvpMat4;
-    glm::vec3 color;
+    glm::vec4 color;
   };
   class SimpleShader{
     private:
       bool _inited = false;
-      SDL_GPUGraphicsPipeline *_pipelineNoCull = nullptr;
-      SDL_GPUGraphicsPipeline *_pipelineBackCull = nullptr;
+      std::unordered_map<Uint32, SDL_GPUGraphicsPipeline*> _pipelineMap;
     public:
       ~SimpleShader();
       bool init();
       bool render(const SimpleShaderParam &param);
   };
 
+  struct RendererSetting{
+    SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1; // 0 -> 3
+  };
   class Renderer{
     private:
       Renderer() = default;
@@ -44,12 +43,19 @@ namespace core{
       bool _canRender = false;
 
       SimpleShader *_simpleShader = nullptr;
-      ShaderType _curShaderType;
+      Uint32 _prevPipelineFlag;
 
       int _width = -1;
       int _height = -1;
-      SDL_GPUTexture *_depthTexture = nullptr;
-      SDL_GPUTexture* _tryCreateDepthTexture();
+      bool _windowSizeChanged;
+      void _checkWindowSizeChanged();
+
+      std::vector<SDL_GPUTexture*> _msaaRenderTextures;
+      std::vector<SDL_GPUTexture*> _depthTextures;
+      bool _tryCreateMsaaAndDepthTextures();
+      void _checkSetting();
+
+      RendererSetting _setting; // can change at runtime
     public:
       Renderer(const Renderer&) = delete;
       Renderer& operator=(const Renderer&) = delete;
@@ -58,8 +64,9 @@ namespace core{
       SDL_GPUDevice* getDevice();
       SDL_GPUCommandBuffer* getCommandBuffer();
       SDL_GPURenderPass* getRenderPass();
-      void setCurShaderType(ShaderType shaderType);
-      ShaderType getCurShaderType();
+      Uint32 getPrevPipelineFlag();
+      void setPrevPipelineFlag(const Uint32 &flag);
+      RendererSetting getSetting();
       SimpleShader* getSimpleShader();
       bool canRender();
       bool init();

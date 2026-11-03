@@ -251,11 +251,13 @@ namespace core{
         SDL_Log("bad simpleShading(color)");
         return false;
       }
+      uint32_t transparentF = TransparentFlag::transNoF;
+      if(simpleShading->transparent()) transparentF = TransparentFlag::transYesF;
       go.components.push_back(SimpleShading{
         .id = simpleShading->id()->str(),
-        .culling = static_cast<CullingType>(simpleShading->culling()),
-        .transparent = simpleShading->transparent(),
-        .color = glm::vec3(color->x(), color->y(), color->z()),
+        .cullingFlag = (static_cast<Uint32>(simpleShading->culling()) << cullingShift),
+        .transparentFlag = (static_cast<Uint32>(simpleShading->transparent()) << transShift),
+        .color = glm::vec4(color->x(), color->y(), color->z(), color->w()),
       });
     }
     if(cameraComponent != nullptr){
@@ -349,29 +351,19 @@ namespace core{
       resourceManager.getResource(mesh.meshRef); // get resource ahead
       const auto &simpleShadingComponent = go.components[simpleShadingIdx];
       const auto &simpleShading = std::get<SimpleShading>(simpleShadingComponent);
-      if(!simpleShading.transparent){
+      if(simpleShading.transparentFlag == TransparentFlag::transNoF){
         auto &nodeData = _renderData._opaqueNodes.emplace_back(NodeData{});
+        nodeData.pipelineFlag = simpleShading.shaderFlag | simpleShading.transparentFlag | simpleShading.cullingFlag;
         nodeData.modelMat4 = modelMat4;
         nodeData.mesh = mesh;
         nodeData.simpleShading = simpleShading;
-        if(simpleShading.culling == CullingType::back){
-          nodeData.shaderType = ShaderType::SimpleBackCull;
-        }
-        else{
-          nodeData.shaderType = ShaderType::SimpleNoCull;
-        }
       }
       else{
         auto &nodeData = _renderData._transparentNodes.emplace_back(NodeData{});
+        nodeData.pipelineFlag = simpleShading.shaderFlag | simpleShading.transparentFlag | simpleShading.cullingFlag;
         nodeData.modelMat4 = modelMat4;
         nodeData.mesh = mesh;
         nodeData.simpleShading = simpleShading;
-        if(simpleShading.culling == CullingType::back){
-          nodeData.shaderType = ShaderType::SimpleBackCull;
-        }
-        else{
-          nodeData.shaderType = ShaderType::SimpleNoCull;
-        }
       }
     }
 
@@ -393,7 +385,7 @@ namespace core{
       float distanceToCam = glm::distance(_renderData.camPos, glm::vec3(opaqueNode.modelMat4[3]));
       Uint32 distanceBits = static_cast<Uint32>(distanceToCam * 1000.0f);
       opaqueNode.sortKey = 0;
-      opaqueNode.sortKey |= (static_cast<Uint64>(opaqueNode.shaderType) << 32);
+      opaqueNode.sortKey |= (static_cast<Uint64>(opaqueNode.pipelineFlag) << 32);
       opaqueNode.sortKey |= (static_cast<Uint64>(distanceBits));
     }
     for(auto &transparentNode: _renderData._transparentNodes){
@@ -401,7 +393,7 @@ namespace core{
       Uint32 distanceBits = ~static_cast<Uint32>(distanceToCam * 1000.0f);
       transparentNode.sortKey = 0;
       transparentNode.sortKey |= (static_cast<Uint64>(distanceBits) << 32);
-      transparentNode.sortKey |= (static_cast<Uint64>(transparentNode.shaderType));
+      transparentNode.sortKey |= (static_cast<Uint64>(transparentNode.pipelineFlag));
     }
 
     // sort
@@ -426,19 +418,29 @@ namespace core{
       if(meshRes == nullptr || meshRes->state == ResourceState::missing) continue;
       if(meshRes->state == ResourceState::pending) continue;
       const auto &gpuVBO = meshRes->gpuVBOs[0];
-      if(
-        opaqueNode.shaderType == ShaderType::SimpleBackCull || 
-        opaqueNode.shaderType == ShaderType::SimpleNoCull
-      ){
-        bool result = renderer.getSimpleShader()->render({
-          .shaderType = opaqueNode.shaderType,
-          .gpuVBO = gpuVBO,
-          .mvpMat4 = _renderData.vpMat4 * opaqueNode.modelMat4,
-          .color = opaqueNode.simpleShading.color
-        });
-        if(!result) return false;
-      }
+      bool result = renderer.getSimpleShader()->render({
+        .pipelineFlag = opaqueNode.pipelineFlag,
+        .gpuVBO = gpuVBO,
+        .mvpMat4 = _renderData.vpMat4 * opaqueNode.modelMat4,
+        .color = opaqueNode.simpleShading.color
+      });
+      if(!result) return false;
     }
+    // render transparent
+    for(const auto &transNode: _renderData._transparentNodes){
+      Resource *meshRes = resourceManager.getResource(transNode.mesh.meshRef);
+      if(meshRes == nullptr || meshRes->state == ResourceState::missing) continue;
+      if(meshRes->state == ResourceState::pending) continue;
+      const auto &gpuVBO = meshRes->gpuVBOs[0];
+      bool result = renderer.getSimpleShader()->render({
+        .pipelineFlag = transNode.pipelineFlag,
+        .gpuVBO = gpuVBO,
+        .mvpMat4 = _renderData.vpMat4 * transNode.modelMat4,
+        .color = transNode.simpleShading.color
+      });
+      if(!result) return false;
+    }
+
 
     return true;
   }
