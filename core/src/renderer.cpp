@@ -26,91 +26,125 @@ namespace core{
   }
   Uint32 Renderer::getPrevPipelineFlag(){ return _prevPipelineFlag; }
   void Renderer::setPrevPipelineFlag(const Uint32 &flag){ _prevPipelineFlag = flag; }
-  RendererSetting Renderer::getSetting(){ return _setting; }
+  RendererFrameState Renderer::getFrameState(){ return _frameState; }
+  void Renderer::setSampleCountSetting(SDL_GPUSampleCount sampleCount){ _setting.sampleCount = sampleCount; }
+  void Renderer::setDepthFormatSetting(SDL_GPUTextureFormat depthFormat){ _setting.depthFormat = depthFormat; }
   SimpleShader* Renderer::getSimpleShader(){ return _simpleShader; };
   bool Renderer::canRender(){
     assert(_inited && "require call init");
     return _canRender;
   }
-  void Renderer::_checkWindowSizeChanged(){
-    int curWidth, curHeight;
-    SDL_GetWindowSizeInPixels(_window, &curWidth, &curHeight);
-    if(_width == curWidth && _height == curHeight){
-      _windowSizeChanged = false;
-    }
-    else{
-      _width = curWidth;
-      _height = curHeight;
-      _windowSizeChanged = true;
-    }
-  };
-  bool Renderer::_tryCreateMsaaAndDepthTextures(){
-    if(!_windowSizeChanged) return true;
-
-    // clear old
-    for(const auto &msaaTexture: _msaaRenderTextures){
-      SDL_ReleaseGPUTexture(_device, msaaTexture);
-    }
-    for(const auto &depthTexture: _depthTextures){
-      SDL_ReleaseGPUTexture(_device, depthTexture);
-    }
-    _msaaRenderTextures.clear();
-    _depthTextures.clear();
-
-    // create textures
-    SDL_Log("create new msaa + depth textures %d %d", _width, _height);
+  void Renderer::_initRendererInitState(){
     SDL_GPUTextureFormat texFormat = SDL_GetGPUSwapchainTextureFormat(_device, _window);
     Uint32 i = SDL_GPU_SAMPLECOUNT_1;
     for(; i <= SDL_GPU_SAMPLECOUNT_8; i++){
       SDL_GPUSampleCount sampleCount = static_cast<SDL_GPUSampleCount>(i);
-      if(!SDL_GPUTextureSupportsSampleCount(_device, texFormat, sampleCount)){
-        break;
+      if(SDL_GPUTextureSupportsSampleCount(_device, texFormat, sampleCount)){
+        _initState.supportSampleCounts.emplace(sampleCount);
       }
-      // create msaa texture
-      SDL_GPUTextureCreateInfo msaaTextureInfo{
-        .type = SDL_GPU_TEXTURETYPE_2D,
-        .format = texFormat,
-        .usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
-        .width = static_cast<Uint32>(_width),
-        .height = static_cast<Uint32>(_height),
-        .layer_count_or_depth = 1,
-        .num_levels = 1,
-        .sample_count = sampleCount,
-      };
-      SDL_GPUTexture *msaaTex = SDL_CreateGPUTexture(_device, &msaaTextureInfo);
-      if(msaaTex == nullptr){
-        SDL_Log("Error while create msaa texture: SDL_CreateGPUTexture %s", SDL_GetError());
-        return false;
-      }
-      _msaaRenderTextures.push_back(msaaTex);
-      // create depth texture
-      SDL_GPUTextureCreateInfo depthTextureInfo{
-        .type = SDL_GPU_TEXTURETYPE_2D,
-        .format = SDL_GPU_TEXTUREFORMAT_D24_UNORM,
-        .usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-        .width = static_cast<Uint32>(_width),
-        .height = static_cast<Uint32>(_height),
-        .layer_count_or_depth = 1,
-        .num_levels = 1,
-        .sample_count = sampleCount,
-      };
-      SDL_GPUTexture *depthTex = SDL_CreateGPUTexture(_device, &depthTextureInfo);
-      if(depthTex == nullptr){
-        SDL_Log("Error while create depth texture: SDL_CreateGPUTexture %s", SDL_GetError());
-        return false;
-      }
-      _depthTextures.push_back(depthTex);
     }
 
-    SDL_Log("created new (%d) msaa + (%d) depth textures", _msaaRenderTextures.size(), _depthTextures.size());
+    i = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
+    for(; i <= SDL_GPU_TEXTUREFORMAT_D32_FLOAT; i++){
+      SDL_GPUTextureFormat depthFormat = static_cast<SDL_GPUTextureFormat>(i);
+      if(SDL_GPUTextureSupportsFormat(_device, depthFormat, SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET)){
+        _initState.supportDepthFormats.emplace(depthFormat);
+      }
+    }
+  }
+  void Renderer::_checkRendererFrameState(){
+    // check window size
+    int curWidth, curHeight;
+    SDL_GetWindowSizeInPixels(_window, &curWidth, &curHeight);
+    if(_frameState.width != curWidth || _frameState.height != curHeight){
+      _frameState.width = curWidth;
+      _frameState.height = curHeight;
+      _frameState.windowSizeChanged = true;
+    }
+    else{
+      _frameState.windowSizeChanged = false;
+    }
+
+    // check sample count
+    if(
+      _frameState.sampleCount != _setting.sampleCount && 
+      _initState.supportSampleCounts.contains(_setting.sampleCount)
+    ){
+      _frameState.sampleCount = _setting.sampleCount;
+      _frameState.sampleCountChanged = true;
+    }
+    else{
+      _frameState.sampleCountChanged = false;
+    }
+
+    // check depth format
+    if(
+      _frameState.depthFormat != _setting.depthFormat && 
+      _initState.supportDepthFormats.contains(_setting.depthFormat)
+    ){
+      _frameState.depthFormat = _setting.depthFormat;
+      _frameState.depthFormatChanged = true;
+    }
+    else{
+      _frameState.depthFormatChanged = false;
+    }
+  }
+  bool Renderer::_recreateMsaaTexture(){
+    // clear old
+    SDL_ReleaseGPUTexture(_device, _frameState.msaaTexture);
+
+    // create msaa texture
+    SDL_Log("create new msaa texture %d %d x%d", _frameState.width, _frameState.height, 1 << _frameState.sampleCount);
+    SDL_GPUTextureFormat texFormat = SDL_GetGPUSwapchainTextureFormat(_device, _window);
+    SDL_GPUTextureCreateInfo msaaTextureInfo{
+      .type = SDL_GPU_TEXTURETYPE_2D,
+      .format = texFormat,
+      .usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
+      .width = static_cast<Uint32>(_frameState.width),
+      .height = static_cast<Uint32>(_frameState.height),
+      .layer_count_or_depth = 1,
+      .num_levels = 1,
+      .sample_count = _frameState.sampleCount,
+    };
+    _frameState.msaaTexture = SDL_CreateGPUTexture(_device, &msaaTextureInfo);
+    if(_frameState.msaaTexture == nullptr){
+      SDL_Log("Error while create msaa texture: SDL_CreateGPUTexture %s", SDL_GetError());
+      return false;
+    }
     return true;
   }
-  void Renderer::_checkSetting(){
-    SDL_GPUSampleCount maxSampleCount = static_cast<SDL_GPUSampleCount>(_msaaRenderTextures.size() - 1);
-    if(_setting.sampleCount > maxSampleCount){
-      SDL_Log("Fallback sample count setting x%d -> x%d", 1 << _setting.sampleCount, 1 << maxSampleCount);
-      _setting.sampleCount = maxSampleCount;
+  bool Renderer::_recreateDepthTexture(){
+    // clear old
+    SDL_ReleaseGPUTexture(_device, _frameState.depthTexture);
+
+    // create depth texture
+    SDL_Log("create new depth texture %d %d %d", _frameState.width, _frameState.height, _frameState.depthFormat);
+    SDL_GPUTextureCreateInfo depthTextureInfo{
+      .type = SDL_GPU_TEXTURETYPE_2D,
+      .format = _frameState.depthFormat,
+      .usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+      .width = static_cast<Uint32>(_frameState.width),
+      .height = static_cast<Uint32>(_frameState.height),
+      .layer_count_or_depth = 1,
+      .num_levels = 1,
+      .sample_count = _frameState.sampleCount,
+    };
+    _frameState.depthTexture = SDL_CreateGPUTexture(_device, &depthTextureInfo);
+    if(_frameState.depthTexture == nullptr){
+      SDL_Log("Error while create depth texture: SDL_CreateGPUTexture %s", SDL_GetError());
+      return false;
     }
+    return true;
+  }
+  bool Renderer::_recreateMsaaDepthTextureOnFrameState(){
+    if(_frameState.windowSizeChanged || _frameState.sampleCountChanged){
+      if(!_recreateMsaaTexture()) return false;
+      if(!_recreateDepthTexture()) return false;
+    }
+    else if(_frameState.depthFormatChanged){
+      if(!_recreateDepthTexture()) return false;
+    }
+    return true;
   }
   bool Renderer::init(){
     assert(!_inited && "dont call init 2 times");
@@ -134,6 +168,9 @@ namespace core{
       return false;
     }
 
+    // init state
+    _initRendererInitState();
+
     // create shaders
     _simpleShader = new SimpleShader();
     if(!_simpleShader->init()) return false;
@@ -154,15 +191,10 @@ namespace core{
   }
   bool Renderer::release(){
     SDL_Log("clear renderer");
-    // clear msaa + depth textures
-    for(const auto &msaaTexture: _msaaRenderTextures){
-      SDL_ReleaseGPUTexture(_device, msaaTexture);
-    }
-    for(const auto &depthTexture: _depthTextures){
-      SDL_ReleaseGPUTexture(_device, depthTexture);
-    }
-    _msaaRenderTextures.clear();
-    _depthTextures.clear();
+    // clear msaa texture
+    SDL_ReleaseGPUTexture(_device, _frameState.msaaTexture);
+    // clear depth texture
+    SDL_ReleaseGPUTexture(_device, _frameState.depthTexture);
     // clear other
     delete _simpleShader;
     SDL_ReleaseWindowFromGPUDevice(_device, _window);
@@ -197,9 +229,8 @@ namespace core{
     assert(_commandBuffer != nullptr && "require startCommand first");
     assert(_renderPass == nullptr && "startRender twice");
 
-    _checkWindowSizeChanged();
-    if(!_tryCreateMsaaAndDepthTextures()) return false;
-    _checkSetting();
+    _checkRendererFrameState();
+    if(!_recreateMsaaDepthTextureOnFrameState()) return false;
 
     SDL_GPUTexture *swapchainTexture;
     if(!SDL_WaitAndAcquireGPUSwapchainTexture(_commandBuffer, _window, &swapchainTexture, nullptr, nullptr)){
@@ -214,13 +245,13 @@ namespace core{
         .load_op = SDL_GPU_LOADOP_CLEAR,
         .store_op = SDL_GPU_STOREOP_STORE
       };
-      if(_setting.sampleCount > SDL_GPU_SAMPLECOUNT_1){
-        colorTargetInfo.texture = _msaaRenderTextures[_setting.sampleCount],
+      if(_frameState.sampleCount > SDL_GPU_SAMPLECOUNT_1){
+        colorTargetInfo.texture = _frameState.msaaTexture,
         colorTargetInfo.store_op = SDL_GPU_STOREOP_RESOLVE;
         colorTargetInfo.resolve_texture = swapchainTexture;
       }
       SDL_GPUDepthStencilTargetInfo depthStencilInfo{
-        .texture = _depthTextures[_setting.sampleCount],
+        .texture = _frameState.depthTexture,
         .clear_depth = 1.0f,
         .load_op = SDL_GPU_LOADOP_CLEAR,
         .store_op = SDL_GPU_STOREOP_DONT_CARE,
@@ -333,6 +364,7 @@ namespace core{
     // prepare flag
     Uint32 shaderFlag = ShaderFlag::simpleShaderF;
     std::array msaaFlags{ msaaX1F, msaaX2F, msaaX4F, msaaX8F};
+    std::array depthFormatFlags{ depthFormat16F, depthFormat24F, depthFormat32F};
     std::array transFlags{ transNoF, transYesF };
     std::array cullingFlags{ cullingNoneF, cullingBackF, cullingFrontF };
 
@@ -405,65 +437,77 @@ namespace core{
       .target_info = SDL_GPUGraphicsPipelineTargetInfo{
         .color_target_descriptions = colorTargetDescriptions.data(),
         .num_color_targets = colorTargetDescriptions.size(),
-        .depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+        .depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
         .has_depth_stencil_target = true
       },
     };
 
     for(const auto &msaaFlag: msaaFlags){
-      for(const auto &transFlag: transFlags){
-        for(const auto &cullingFlag: cullingFlags){
-          // transparent
-          if(transFlag == transNoF){
-            colorTargetDescriptions[0].blend_state = {
-              .enable_blend = false
-            };
+      for(const auto &depthFormatFlag: depthFormatFlags){
+        for(const auto &transFlag: transFlags){
+          for(const auto &cullingFlag: cullingFlags){
+            // transparent
+            if(transFlag == transNoF){
+              colorTargetDescriptions[0].blend_state = {
+                .enable_blend = false
+              };
+            }
+            else{
+              colorTargetDescriptions[0].blend_state = {
+                .src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA,
+                .dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+                .color_blend_op = SDL_GPU_BLENDOP_ADD,
+                .src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE,
+                .dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+                .alpha_blend_op = SDL_GPU_BLENDOP_ADD,
+                .enable_blend = true
+              };
+            }
+            // culling
+            if(cullingFlag == cullingNoneF){
+              pipelineCreateInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+            }
+            else if(cullingFlag == cullingBackF){
+              pipelineCreateInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
+            }
+            else if(cullingFlag == cullingFrontF){
+              pipelineCreateInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_FRONT;
+            }
+            // msaa
+            if(msaaFlag == msaaX1F){
+              pipelineCreateInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+            }
+            else if(msaaFlag == msaaX2F){
+              pipelineCreateInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_2;
+            }
+            else if(msaaFlag == msaaX4F){
+              pipelineCreateInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_4;
+            }
+            else if(msaaFlag == msaaX8F){
+              pipelineCreateInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_8;
+            }
+            // depth format
+            if(depthFormatFlag == depthFormat16F){
+              pipelineCreateInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
+            }
+            else if(depthFormatFlag == depthFormat24F){
+              pipelineCreateInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+            }
+            else if(depthFormatFlag == depthFormat32F){
+              pipelineCreateInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+            }
+            // create pipelines
+            SDL_GPUGraphicsPipeline *pipeline = SDL_CreateGPUGraphicsPipeline(device, &pipelineCreateInfo);
+            if(pipeline == nullptr){
+              SDL_Log("Couldn't create _pipelineNoCull! %s", SDL_GetError());
+              SDL_ReleaseGPUShader(device, vertexShader);
+              SDL_ReleaseGPUShader(device, fragmentShader);
+              return false;
+            }
+            // add pipeline to map
+            Uint32 flagKey = shaderFlag | msaaFlag | transFlag | cullingFlag | depthFormatFlag;
+            _pipelineMap[flagKey] = pipeline;
           }
-          else{
-            colorTargetDescriptions[0].blend_state = {
-              .src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA,
-              .dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-              .color_blend_op = SDL_GPU_BLENDOP_ADD,
-              .src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE,
-              .dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-              .alpha_blend_op = SDL_GPU_BLENDOP_ADD,
-              .enable_blend = true
-            };
-          }
-          // culling
-          if(cullingFlag == cullingNoneF){
-            pipelineCreateInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-          }
-          else if(cullingFlag == cullingBackF){
-            pipelineCreateInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
-          }
-          else if(cullingFlag == cullingFrontF){
-            pipelineCreateInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_FRONT;
-          }
-          // msaa
-          if(msaaFlag == msaaX1F){
-            pipelineCreateInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-          }
-          else if(msaaFlag == msaaX2F){
-            pipelineCreateInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_2;
-          }
-          else if(msaaFlag == msaaX4F){
-            pipelineCreateInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_4;
-          }
-          else if(msaaFlag == msaaX8F){
-            pipelineCreateInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_8;
-          }
-          // create pipelines
-          SDL_GPUGraphicsPipeline *pipeline = SDL_CreateGPUGraphicsPipeline(device, &pipelineCreateInfo);
-          if(pipeline == nullptr){
-            SDL_Log("Couldn't create _pipelineNoCull! %s", SDL_GetError());
-            SDL_ReleaseGPUShader(device, vertexShader);
-            SDL_ReleaseGPUShader(device, fragmentShader);
-            return false;
-          }
-          // add pipeline to map
-          Uint32 flagKey = shaderFlag | msaaFlag | transFlag | cullingFlag;
-          _pipelineMap[flagKey] = pipeline;
         }
       }
     }
@@ -480,7 +524,9 @@ namespace core{
     Renderer &renderer = Renderer::GetInstance();
     if(!renderer.canRender()) return true;
 
-    Uint32 pipelineFlag = param.pipelineFlag | (renderer.getSetting().sampleCount << msaaShift);
+    Uint32 pipelineFlag = param.pipelineFlag 
+      | (renderer.getFrameState().sampleCount << msaaShift)
+      | ((renderer.getFrameState().depthFormat - SDL_GPU_TEXTUREFORMAT_D16_UNORM) << depthFormatShift);
 
     if(!_pipelineMap.contains(pipelineFlag)){
       SDL_Log("Error: cant find pipeline with flag %d", param.pipelineFlag);

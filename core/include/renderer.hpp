@@ -28,8 +28,24 @@ namespace core{
       bool render(const SimpleShaderParam &param);
   };
 
+  struct RendererInitState{
+    std::unordered_set<SDL_GPUSampleCount> supportSampleCounts;
+    std::unordered_set<SDL_GPUTextureFormat> supportDepthFormats;
+  };
+  struct RendererFrameState{
+    int width = -1;
+    int height = -1;
+    bool windowSizeChanged;
+    SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1;
+    bool sampleCountChanged;
+    SDL_GPUTexture *msaaTexture = nullptr;
+    SDL_GPUTextureFormat depthFormat = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
+    bool depthFormatChanged;
+    SDL_GPUTexture *depthTexture = nullptr;
+  };
   struct RendererSetting{
-    SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1; // 0 -> 3
+    SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_4; // 0 -> 3
+    SDL_GPUTextureFormat depthFormat = SDL_GPU_TEXTUREFORMAT_D24_UNORM; // 58 -> 60
   };
   class Renderer{
     private:
@@ -42,18 +58,16 @@ namespace core{
       SDL_GPURenderPass *_renderPass = nullptr;
       bool _canRender = false;
 
+      RendererInitState _initState;
+      RendererFrameState _frameState;
+      void _initRendererInitState();
+      void _checkRendererFrameState();
+      bool _recreateMsaaTexture();
+      bool _recreateDepthTexture();
+      bool _recreateMsaaDepthTextureOnFrameState();
+
       SimpleShader *_simpleShader = nullptr;
       Uint32 _prevPipelineFlag;
-
-      int _width = -1;
-      int _height = -1;
-      bool _windowSizeChanged;
-      void _checkWindowSizeChanged();
-
-      std::vector<SDL_GPUTexture*> _msaaRenderTextures;
-      std::vector<SDL_GPUTexture*> _depthTextures;
-      bool _tryCreateMsaaAndDepthTextures();
-      void _checkSetting();
 
       RendererSetting _setting; // can change at runtime
     public:
@@ -66,7 +80,9 @@ namespace core{
       SDL_GPURenderPass* getRenderPass();
       Uint32 getPrevPipelineFlag();
       void setPrevPipelineFlag(const Uint32 &flag);
-      RendererSetting getSetting();
+      RendererFrameState getFrameState();
+      void setSampleCountSetting(SDL_GPUSampleCount sampleCount);
+      void setDepthFormatSetting(SDL_GPUTextureFormat depthFormat);
       SimpleShader* getSimpleShader();
       bool canRender();
       bool init();

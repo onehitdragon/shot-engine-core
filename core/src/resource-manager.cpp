@@ -2,9 +2,9 @@
 
 namespace core{
   PAKFile::~PAKFile(){
+    SDL_Log("clear pak file");
     SDL_CloseAsyncIO(_asyncIO, false, _asyncIOQueue, nullptr);
     SDL_DestroyAsyncIOQueue(_asyncIOQueue);
-    SDL_Log("clear pak file");
   }
   bool PAKFile::init(const std::string &pakFileName){
     assert(!_inited && "dont call init 2 times");
@@ -31,7 +31,7 @@ namespace core{
       SDL_CloseIO(iostream);
       return false;
     }
-    _id = std::string(headerIdBuf.data());
+    _id = std::string(headerIdBuf.data(), 4);
     uint32_t tableOffset;
     uint32_t tableSize;
     if(!SDL_ReadU32LE(iostream, &tableOffset)){
@@ -120,11 +120,12 @@ namespace core{
   ){
     assert(_inited && "call init first");
 
-    auto item = _pakEntryMap.find(uuid);
+    // dont exist in entry table
+    const auto item = _pakEntryMap.find(uuid);
     if(item == _pakEntryMap.end()){
       return PAKQueueState::fail;
     }
-    PAKEntry pakEntry = item->second;
+    const PAKEntry &pakEntry = item->second;
 
     // first request
     if(_requestedMap.find(uuid) == _requestedMap.end()){
@@ -135,7 +136,7 @@ namespace core{
         _asyncIO,
         queueData.buffer.data(), pakEntry.offset, pakEntry.size,
         _asyncIOQueue,
-        static_cast<void*>(&queueData)
+        &queueData
       );
       if(!result){
         _requestedMap.erase(uuid);
@@ -151,11 +152,10 @@ namespace core{
       PAKQueueData *queueData = static_cast<PAKQueueData*>(outcome.userdata);
       if(outcome.result != SDL_AsyncIOResult::SDL_ASYNCIO_COMPLETE){
         _requestedMap.erase(queueData->uuid);
-        SDL_Log("error: cant get pak entry");
+        SDL_Log("error while read data of entry uuid %s", queueData->uuid.c_str());
         continue;
       }
-      auto nodeHandle = _requestedMap.extract(queueData->uuid);
-      _completedMap.insert(std::move(nodeHandle));
+      _completedMap.insert(_requestedMap.extract(queueData->uuid));
     }
 
     //
@@ -204,7 +204,7 @@ namespace core{
     assert(_inited && "require call init");
 
     // create if not exist
-    auto item = _resourceMap.find(uuid);
+    const auto item = _resourceMap.find(uuid);
     if(item == _resourceMap.end()){
       Resource &resource = _resourceMap[uuid];
       resource.state = ResourceState::pending;

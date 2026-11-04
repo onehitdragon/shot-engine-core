@@ -15,7 +15,7 @@ namespace core{
   };
   struct NodeData{
     Uint64 sortKey;
-    Uint32 pipelineFlag;
+    Uint32 pipelineFlag; // shader | transparent | culling
     glm::mat4 modelMat4 = glm::mat4(1.0f);
     Mesh mesh;
     SimpleShading simpleShading;
